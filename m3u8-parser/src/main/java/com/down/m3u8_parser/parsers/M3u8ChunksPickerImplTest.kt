@@ -9,7 +9,7 @@ import com.down.m3u8_parser.model.SingleStream
 import com.down.m3u8_parser.parsers.single_stream.M3u8SingleStreamParserImpl
 import com.down.m3u8_parser.picker.StreamPickerImpl
 
-class M3u8ChunksPickerImpl(
+class M3u8ChunksPickerImplTest(
     private val playlistParser: M3u8PlaylistParser = M3U8PlaylistParserImpl(),
     private val singleStreamParser: M3u8SingleStreamParser = M3u8SingleStreamParserImpl(),
     private val streamPicker: StreamPicker = StreamPickerImpl()
@@ -51,5 +51,4 @@ class M3u8ChunksPickerImpl(
     fun log(msg: String) {
         Log.d(TAG, "M3u8ChunksPickerImpl:$msg")
     }
-
 }

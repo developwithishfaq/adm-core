@@ -30,7 +30,7 @@ fun MainScreen(
             .fillMaxSize()
     ) {
         var textUrl by remember {
-            mutableStateOf("")
+            mutableStateOf("https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8")
         }
         var fileName by remember {
             mutableStateOf(System.currentTimeMillis().toString() + ".mp4")

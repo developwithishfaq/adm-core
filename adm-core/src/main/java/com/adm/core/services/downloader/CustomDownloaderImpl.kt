@@ -48,10 +48,8 @@ class CustomDownloaderImpl(
                 headers = headers,
                 showNotification = showNotification
             )
-//        CoroutineScope(Dispatchers.IO).launch {
         downloadStatus = DownloadingState.Idle
-        downloadFile()
-//        }
+        downloadFile(false)
         downloadedId = UUID.randomUUID().toString()
         return downloadedId
     }
@@ -62,12 +60,12 @@ class CustomDownloaderImpl(
             log("Resuming download...")
             CoroutineScope(Dispatchers.IO).launch {
                 downloadStatus = DownloadingState.Progress
-                downloadFile()
+                downloadFile(true)
             }
         }
     }
 
-    private suspend fun downloadFile() {
+    private suspend fun downloadFile(forPauseResume: Boolean) {
         withContext(Dispatchers.IO) {
             val destFile = File(
                 DownloaderPathsHelper.getDirInsideDownloads(model.directoryPath),
@@ -78,7 +76,13 @@ class CustomDownloaderImpl(
             val existingFileSize = if (destFile.exists()) destFile.length() else 0L
             val connection = URL(model.url).openConnection() as HttpURLConnection
             if (supportChunking) {
-                connection.setRequestProperty("Range", "bytes=$existingFileSize-")
+                if (forPauseResume) {
+                    connection.setRequestProperty("Range", "bytes=$existingFileSize-")
+                }
+                log("Headers=${model.headers}")
+                model.headers.forEach {
+                    connection.setRequestProperty(it.key, it.value)
+                }
             }
             connection.connect()
 
@@ -106,7 +110,10 @@ class CustomDownloaderImpl(
                         downloadedBytesSize = downloadedSize
                         totalBytesSize = totalSize
                         downloadStatus = DownloadingState.Progress
-                        log("Downloaded $downloadedSize / $totalSize bytes.\nUrl=${model.url}")
+                        log(
+                            "Downloaded $downloadedSize / $totalSize bytes.\nUrl=${model.url}",
+                            tag = "DownProgress"
+                        )
                     }
 
                     if (!isPaused) {
@@ -127,8 +134,8 @@ class CustomDownloaderImpl(
         }
     }
 
-    private fun log(msg: String) {
-        Log.d(TAG, "CustomDownloaderImpl:$msg")
+    private fun log(msg: String, tag: String = TAG) {
+        Log.d(tag, "CustomDownloaderImpl:$msg")
     }
 
     override fun pauseDownloading() {

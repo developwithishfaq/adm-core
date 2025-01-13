@@ -50,9 +50,9 @@ class M3u8Downloader(
                 fileName = "${index}.${fileName.substringAfterLast(".")}",
                 directoryPath = newDirectory,
                 mimeType = mimeType,
-                headers = headers,
+                headers = headers + stream.headers,
                 showNotification = showNotification,
-                supportChunks = false
+                supportChunks = true
             )
             download += 1
             downloader[id] = mediaDownloader

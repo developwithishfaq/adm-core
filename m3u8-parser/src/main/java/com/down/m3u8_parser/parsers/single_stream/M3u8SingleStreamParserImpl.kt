@@ -14,17 +14,18 @@ class M3u8SingleStreamParserImpl(
 
     private val m3u8Starting = "#EXTM3U"
     private val infoLineStarting = "#EXTINF:"
+    private val byteRangeLineStarting = "#EXT-X-BYTERANGE"
     private var filterStarted = false
     private var pickNextLine = false
+    private var isThatByteRangerM3u8 = false
 
     override suspend fun getM3u8Chunks(
         url: String,
         headers: Map<String, String>
     ): List<SingleStream> {
-
         val response = apiHitter.get(link = url, headers)
         log("Response=${response}")
-        return if (response == null) {
+        val chunks = if (response == null) {
             emptyList()
         } else {
             if (response.contains("#EXTINF:")) {
@@ -36,6 +37,11 @@ class M3u8SingleStreamParserImpl(
                 emptyList()
             }
         }
+        log("Chunks:")
+        chunks.forEachIndexed { index, chunk ->
+            log("$index-${chunk}")
+        }
+        return chunks
     }
 
     override suspend fun getM3u8Chunks(text: String): List<SingleStream> {
@@ -46,12 +52,33 @@ class M3u8SingleStreamParserImpl(
                 filterStarted = true
             } else if (filterStarted && line.startsWith(infoLineStarting)) {
                 pickNextLine = true
-            } else if (pickNextLine) {
-                streams.add(
-                    SingleStream(
-                        link = line,
+            } else if (pickNextLine && line.startsWith(byteRangeLineStarting)) {
+                log("Line Picked = $line")
+                val bytes = line.substringAfter(":").split("@")
+                if (bytes.size == 2) {
+                    isThatByteRangerM3u8 = true
+                    streams.add(
+                        SingleStream(
+                            link = "",
+                            headers = mapOf(
+                                "Range" to "bytes=${bytes[0]}-${bytes[1]}"
+                            )
+                        )
                     )
-                )
+                }
+            } else if (pickNextLine) {
+                if (isThatByteRangerM3u8) {
+                    streams[streams.lastIndex] = streams.last().copy(
+                        link = line
+                    )
+                } else {
+                    streams.add(
+                        SingleStream(
+                            link = line,
+                            headers = emptyMap()
+                        )
+                    )
+                }
                 pickNextLine = false
             }
         }
@@ -60,5 +87,26 @@ class M3u8SingleStreamParserImpl(
 
     fun log(msg: String) {
         Log.d(TAG, "M3u8SingleStreamParserImpl:$msg")
+    }
+
+    data class Segment(val uri: String, val byteRange: String)
+
+    fun parseM3U8DeepSeek(m3u8Content: String): List<Segment> {
+        val segments = mutableListOf<Segment>()
+        val lines = m3u8Content.lines()
+
+        var i = 0
+        while (i < lines.size) {
+            if (lines[i].startsWith("#EXT-X-BYTERANGE:")) {
+                val byteRange = lines[i].substringAfter(":").trim()
+                val uri = lines[i + 1].trim()
+                segments.add(Segment(uri, byteRange))
+                i += 2
+            } else {
+                i++
+            }
+        }
+
+        return segments
     }
 }
