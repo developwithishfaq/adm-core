@@ -1,6 +1,7 @@
 [versions]
 agp = "8.7.3"
 kotlin = "2.1.0"
+kspkotlin = "2.1.0-1.0.29"
 coreKtx = "1.15.0"
 junit = "4.13.2"
 junitVersion = "1.2.1"
@@ -12,9 +13,14 @@ koin-bom = "4.0.0"
 appcompat = "1.7.0"
 material = "1.12.0"
 kotlinxSerializationJson = "1.7.3"
+workRuntimeKtx = "2.9.0"
+gson = "2.10.1"
+roomKtx = "2.6.1"
+
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -32,15 +38,26 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin-bom" }
-koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin-bom" }
 koin-compose = { module = "io.insert-koin:koin-androidx-compose-navigation", version.ref = "koin-bom" }
 koin-core = { module = "io.insert-koin:koin-core" }
+
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomKtx" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomKtx" }
+
+
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+
+koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin-bom" }
 sdp-compose = { module = "com.github.Kaaveh:sdp-compose", version = "1.1.0" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+
+[bundles]
+koin = ["koin-compose", "koin-core"]
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "kspkotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 

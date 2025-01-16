@@ -17,8 +17,7 @@ class StreamPickerImpl : StreamPicker {
                     url = baseUrl + "/${stream.url}"
                 )
             }
-            stream
-        } else {
+         } else {
             null
         }
     }

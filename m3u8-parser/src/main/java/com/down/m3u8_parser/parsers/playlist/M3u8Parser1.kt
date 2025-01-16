@@ -28,6 +28,7 @@ class M3u8Parser1 : M3u8TextParsers {
                 }
             }
             Log.d(TAG, "Total Streams:${streams.size}")
+            Log.d(TAG, "Total Streamss:${streams}")
             streams
         }
     }

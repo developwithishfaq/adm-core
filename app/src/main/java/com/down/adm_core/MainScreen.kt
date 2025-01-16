@@ -1,9 +1,14 @@
 package com.down.adm_core
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
@@ -15,7 +20,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.adm.core.InProgressVideoUi
+import com.adm.core.components.DownloadingState
 import ir.kaaveh.sdpcompose.sdp
 import org.koin.androidx.compose.koinViewModel
 
@@ -24,6 +32,7 @@ fun MainScreen(
     viewModel: MainScreenViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val progress: List<InProgressVideoUi> by viewModel.progress.collectAsStateWithLifecycle()
     val context = LocalContext.current
     Column(
         modifier = Modifier
@@ -58,32 +67,58 @@ fun MainScreen(
         }) {
             Text("Download")
         }
-        Button(onClick = {
-            viewModel.merge(context)
-        }) {
-            Text("Merge")
-        }
-        Button(onClick = {
-            viewModel.pause(context)
-        }) {
-            Text("Pause")
-        }
-        Button(onClick = {
-            viewModel.resume(context)
-        }) {
-            Text("Resume")
-        }
+
         VerticalSpacer(20)
-        Text(state.progress.toString())
-        LinearProgressIndicator(
-            progress = {
-                state.progress
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-        )
-        VerticalSpacer()
-        Text(state.status.toString())
+
+        LazyColumn(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            items(progress) {
+                Text(text = it.fileName)
+                Text(it.progress.toString())
+                LinearProgressIndicator(
+                    progress = {
+                        if (it.progress.isNaN()) {
+                            0f
+                        } else
+                            it.progress
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                )
+                VerticalSpacer()
+                Text(it.status.toString())
+                Row {
+                    Button(onClick = {
+                        if (it.status == DownloadingState.Paused) {
+                            viewModel.resume(it.id.toLong())
+                        } else {
+
+                            viewModel.pause(it.id.toLong())
+                        }
+
+                    }) {
+                        Text(
+                            text = if (it.status == DownloadingState.Paused) "Resume" else "Pause"
+                        )
+                    }
+
+                    Button(onClick = {
+                        viewModel.resume(it.id.toLong())
+                    }) {
+                        Text(text = "Restart")
+                    }
+
+                    Button(onClick = {
+                        viewModel.pause(it.id.toLong())
+                    }) {
+                        Text(text = "Cancel")
+                    }
+                }
+            }
+        }
+
     }
 }
 

@@ -1,5 +1,6 @@
-package com.down.adm_core.m3u8
+package com.adm.core.m3u8
 
+import android.content.Context
 import android.util.Log
 import com.adm.core.components.DownloadingState
 import com.adm.core.services.downloader.CustomDownloaderImpl
@@ -11,6 +12,7 @@ import java.io.File
 import java.util.UUID
 
 class M3u8Downloader(
+    private val context: Context,
     private val m3U8PlaylistParser: M3u8ChunksPicker = M3u8ChunksPickerImpl(),
 ) : MediaDownloader {
 
@@ -28,7 +30,7 @@ class M3u8Downloader(
         headers: Map<String, String>,
         showNotification: Boolean,
         supportChunks: Boolean
-    ): String {
+    ): Result<String> {
         val streams: List<SingleStream> =
             m3U8PlaylistParser.getChunks(m3u8Link = url, headers = headers)
         totalChunks = streams.size.toLong()
@@ -36,8 +38,9 @@ class M3u8Downloader(
         val newDirectory = directoryPath + "/${fileName.substringBeforeLast(".")}"
         log("New Save Directory = $newDirectory")
         File(newDirectory).mkdirs()
+/*
         streams.forEachIndexed { index, stream ->
-            val mediaDownloader = CustomDownloaderImpl()
+            val mediaDownloader = CustomDownloaderImpl(context)
             val baseUrl = url.substringBeforeLast("/")
             val urlToDownload = if (stream.link.startsWith("http")) {
                 stream.link
@@ -55,15 +58,15 @@ class M3u8Downloader(
                 supportChunks = false
             )
             download += 1
-            downloader[id] = mediaDownloader
-        }
+         }
+*/
         log("Streams(${streams.size}) = " + streams.toString())
         downloadingId = UUID.randomUUID().toString()
-        return downloadingId
+        return Result.success(downloadingId)
     }
 
     override fun getBytesInfo(): Pair<Long, Long> {
-        return Pair(download * 1024, totalChunks * 1024)
+        return Pair(download , totalChunks )
     }
 
     override fun getCurrentStatus(): DownloadingState {

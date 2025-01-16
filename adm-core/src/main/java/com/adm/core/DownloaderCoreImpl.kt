@@ -6,6 +6,7 @@ import com.adm.core.base.DownloaderBase
 import com.adm.core.components.DownloadingState
 import com.adm.core.components.SupportedMimeTypes
 import com.adm.core.services.downloader.MediaDownloader
+import java.io.File
 
 class DownloaderCoreImpl(
     private val url: String,
@@ -14,6 +15,7 @@ class DownloaderCoreImpl(
     private val headers: Map<String, String> = hashMapOf(),
     private val mimeType: String = SupportedMimeTypes.Video.mimeTye,
     private val showNotification: Boolean = true,
+    private val supportChunks: Boolean = true,
     private val mediaDownloader: MediaDownloader
 ) : DownloaderBase(
     url = url,
@@ -27,20 +29,19 @@ class DownloaderCoreImpl(
     private var downloadingState: DownloadingState = DownloadingState.Idle
     private var mMediaDownloader: MediaDownloader = mediaDownloader
 
-    private var downloadingId: String = ""
 
     override suspend fun startDownloading(context: Context) {
-        Log.d("cvv", "startDownloading init url=$url")
-        downloadingId = mediaDownloader.downloadMedia(
+         Log.d("cvv", "startDownloading init url=$url")
+        mediaDownloader.downloadMedia(
             url = url,
             fileName = fileName,
             directoryPath = destinationDirectory,
             mimeType = mimeType,
             headers = headers,
             showNotification = showNotification,
-            supportChunks = true
+            supportChunks = supportChunks
         )
-        Log.d("cvv", "startDownloading: $downloadingId")
+//        Log.d("cvv", "startDownloading: $downloadingId")
     }
 
     override fun resumeDownloading(context: Context) {
@@ -74,3 +75,4 @@ class DownloaderCoreImpl(
 
 
 }
+

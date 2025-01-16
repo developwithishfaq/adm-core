@@ -23,7 +23,7 @@ class AndroidDownloadManagerImpl(
         headers: Map<String, String>,
         showNotification: Boolean,
         supportChunks: Boolean
-    ): String {
+    ): Result<String> {
         val path = "$directoryPath/${fileName}"
 //        AllVideoDownloader/.progress/Discover Popular Videos  Faceb/.1.mp4
 //        Ishfaq/1736542208701.mp4
@@ -41,7 +41,7 @@ class AndroidDownloadManagerImpl(
             request.addRequestHeader(key, value)
         }
         downloadingId = downloadManager.enqueue(request)
-        return downloadingId.toString()
+        return  Result.success("")
     }
 
     override fun getBytesInfo(): Pair<Long, Long> {

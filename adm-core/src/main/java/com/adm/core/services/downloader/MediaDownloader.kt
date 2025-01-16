@@ -11,7 +11,7 @@ interface MediaDownloader {
         headers: Map<String, String>,
         showNotification: Boolean,
         supportChunks: Boolean
-    ): String
+    ): Result<String>
 
     fun getBytesInfo(): Pair<Long, Long>
     fun getCurrentStatus(): DownloadingState

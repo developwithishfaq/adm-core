@@ -1,6 +1,11 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.ksp)
+    id("kotlin-kapt")
+
+    kotlin("plugin.serialization") version "2.0.21"
+
 }
 
 android {
@@ -40,4 +45,25 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+
+    implementation(libs.androidx.work.runtime.ktx)
+
+    implementation(platform(libs.koin.bom))
+    implementation(libs.bundles.koin)
+
+
+    implementation(libs.kotlinx.serialization.json)
+
+    implementation(libs.gson)
+
+
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+
+    implementation(project(":m3u8-parser"))
+
 }

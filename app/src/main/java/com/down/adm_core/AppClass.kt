@@ -1,6 +1,7 @@
 package com.down.adm_core
 
 import android.app.Application
+import com.adm.core.di.coreModule
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 import org.koin.core.module.dsl.viewModelOf
@@ -14,6 +15,7 @@ class AppClass : Application() {
             modules(modules = module {
                 viewModelOf(::MainScreenViewModel)
             })
+            modules(coreModule)
         }
     }
 }

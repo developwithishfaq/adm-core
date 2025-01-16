@@ -7,8 +7,11 @@ import androidx.compose.ui.util.fastMap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.adm.core.DownloaderCoreImpl
+import com.adm.core.MyDownloaderManager
+import com.adm.core.ProgressManager
 import com.adm.core.components.DownloadingState
-import com.down.adm_core.m3u8.M3u8Downloader
+import com.adm.core.components.SupportedMimeTypes
+import com.adm.core.m3u8.createThisFolderIfNotExists
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,43 +20,56 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 data class ScreenState(
     val progress: Float = 0f,
     val status: DownloadingState = DownloadingState.Idle
 )
 
-class MainScreenViewModel : ViewModel() {
+class MainScreenViewModel(
+     private val myDownloaderManager: MyDownloaderManager,
+    private val progressManager: ProgressManager
+) : ViewModel() {
 
     private val _state = MutableStateFlow(ScreenState())
     val state = _state.asStateFlow()
     private lateinit var downloader: DownloaderCoreImpl
 
+
     fun download(context: Context, fileName: String, textUrl: String) {
         val (_, directory) = getFileNameAndDirectory()
-        downloader = DownloaderCoreImpl(
-            url = textUrl,
-            fileName = "Test.mp4",
-            destinationDirectory = directory,
-            showNotification = true,
-            mediaDownloader = M3u8Downloader()
-        )
-        viewModelScope.apply {
-            launch {
-                downloader.startDownloading(context)
-            }
-            launch {
-                checkProgress(downloader)
-            }
+        viewModelScope.launch {
+
+            myDownloaderManager.startDownloading(
+                url = textUrl,
+                fileName = fileName,
+                directoryPath = directory,
+                showNotification = true,
+                mimeType = SupportedMimeTypes.Video.mimeTye,
+                supportChunks = true,
+                headers = emptyMap()
+            )
+        }
+        /* viewModelScope.apply {
+
+             launch {
+                 checkProgress(downloader)
+             }
+         }*/
+    }
+
+    fun pause(id:Long) {
+        viewModelScope.launch {
+            myDownloaderManager.pauseDownloading(id)
         }
     }
 
-    fun pause(context: Context) {
-        downloader.pauseDownloading(context)
-    }
-
-    fun resume(context: Context) {
-        downloader.resumeDownloading(context)
+    fun resume(id:Long) {
+        viewModelScope.launch {
+            myDownloaderManager.resumeDownloading(id)
+        }
     }
 
     private fun getFileNameAndDirectory(): Pair<String, String> {
@@ -62,8 +78,9 @@ class MainScreenViewModel : ViewModel() {
         val fileName = "Test" + ".mp4"
         val mainStorage =
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        File(mainStorage, directory).mkdir()
-        return Pair(fileName, directory)
+      val folder=  File(mainStorage, directory)
+        folder.path.createThisFolderIfNotExists()
+        return Pair(fileName, folder.absolutePath)
     }
 
     private suspend fun checkProgress(downloader: DownloaderCoreImpl) {
@@ -71,6 +88,7 @@ class MainScreenViewModel : ViewModel() {
         var runLoop = true
         while (runLoop) {
             val downState = downloader.getDownloadingState()
+
             val downloaded = downloader.getDownloadedSize()
             val total = downloader.getTotalSize()
             Log.d("cvv", "checkProgress(${downState})\ndownloaded=${downloaded},total=${total}")
@@ -97,6 +115,9 @@ class MainScreenViewModel : ViewModel() {
                 }
                 runLoop = false
             }
+            if (downState == DownloadingState.Failed)
+                runLoop = false
+
         }
     }
 
@@ -113,21 +134,59 @@ class MainScreenViewModel : ViewModel() {
     fun merge(context: Context) {
         viewModelScope.launch {
             val path =
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path + "/Ishfaq/Test"
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path + "/Ishfaq/1736792505728"
+
+            val path2 =
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path + "/Ishfaq/razaaii.mp4"
+
             val file = File(path)
             val list = (file.listFiles()?.toList()?.mapNotNull { it } ?: emptyList())
             val sorted = list.sortedBy {
-                it.name
+                it.nameWithoutExtension.toIntOrNull() ?: Int.MAX_VALUE
             }
             Log.d(
                 "cvv",
                 "checkProgress(exists=${file.exists()})\nFile Path=${path}\nItems=${list.size}\nList=${sorted}"
             )
-            withContext(Dispatchers.IO) {
-                File("$path.mp4").createNewFile()
-            }
+            mergeTsFiles(sorted.map { it.path }, path2)
+
         }
     }
 
+    private val TAG = "VideoMerger"
+    private val BUFFER_SIZE = 1 * 1024 * 1024 // 1MB
+
+
+    fun mergeTsFiles(segmentPaths: List<String>, outputFilePath: String) {
+        val outputFile = File(outputFilePath)
+        try {
+            // Create a FileOutputStream to write the merged file
+            FileOutputStream(outputFile).use { outputStream ->
+                for (segmentPath in segmentPaths) {
+                    val segmentFile = File(segmentPath)
+                    if (!segmentFile.exists()) {
+                        Log.d(TAG, "Segment file not found: $segmentPath")
+                        continue
+                    }
+
+                    // Read the segment file and write its bytes to the output file
+                    FileInputStream(segmentFile).use { inputStream ->
+                        val buffer = ByteArray(1024 * 1024) // 1 MB buffer
+                        var bytesRead: Int
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            outputStream.write(buffer, 0, bytesRead)
+                        }
+                    }
+                }
+            }
+
+            Log.d(TAG, "Merged TS file created at: $outputFilePath")
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Log.d(TAG, "Error merging TS files: ${e.message}")
+        }
+    }
+
+    val progress=progressManager.videosProgress
 
 }
