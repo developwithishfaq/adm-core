@@ -52,9 +52,7 @@ class CustomDownloaderImpl(
     private var filesDownloaded = 0
     private var isDownloadingCompleted = false
     var mDestFile: File? = null
-    private val tempDirFile: File by lazy {
-        tempDirProvider.provideTempDir("mp4Videos/${System.currentTimeMillis()}")
-    }
+    private var tempDirFile: File ?=null
     private val maxDownloadsCount: Int by lazy {
         maxParallelDownloads.getMaxParallelDownloadsCount()
     }
@@ -68,6 +66,9 @@ class CustomDownloaderImpl(
         showNotification: Boolean,
         supportChunks: Boolean
     ): Result<String> {
+         tempDirFile= tempDirProvider.provideTempDir("mp4Videos/${fileName.substringBeforeLast(".")}")
+
+
         try {
             scope = CoroutineScope(Dispatchers.IO)
             isPaused = false
@@ -170,7 +171,7 @@ class CustomDownloaderImpl(
                         logger.logMessage(TAG, "All chunks downloaded")
 
                         if (!isPaused) {
-                            val result = videosMerger.mergeVideos(tempDirFile.path, destFile.path)
+                            val result = videosMerger.mergeVideos(tempDirFile!!.path, destFile.path)
                             result.getOrThrow()
                             isDownloadingCompleted = true
                         }
@@ -266,6 +267,7 @@ class CustomDownloaderImpl(
                 logger.logMessage(TAG, "Download after")
 
                 scope.ensureActive()
+                hashMap[destFile.path] = destFile.length()
 
                 filesDownloaded += 1
 
@@ -301,17 +303,17 @@ class CustomDownloaderImpl(
     }
 
     override fun getBytesInfo(): Pair<Long, Long> {
-//      hashMap.values.sum()
-        val value = if (supportChunking) {
-            var result = tempDirFile.listFiles()?.sumOf { it.length() } ?: 0
+      val sum=hashMap.values.sum()
+       /* val value = if (supportChunking) {
+            var result = tempDirFile?.listFiles()?.sumOf { it.length() } ?: 0
             if (result < 1) {
                 result = mDestFile?.length() ?: 0
             }
             result
         } else {
             mDestFile?.length() ?: 0L
-        }
-        return Pair(value, totalBytesSize)
+        }*/
+        return Pair(sum, totalBytesSize)
     }
 
     override fun getCurrentStatus(): DownloadingState {
