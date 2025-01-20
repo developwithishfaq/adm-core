@@ -6,6 +6,7 @@ import android.os.Environment
 import android.util.Log
 import androidx.core.net.toUri
 import com.adm.core.components.DownloadingState
+import kotlinx.coroutines.flow.Flow
 
 class AndroidDownloadManagerImpl(
     context: Context
@@ -60,6 +61,9 @@ class AndroidDownloadManagerImpl(
         return Pair(bytesDownloaded, totalSize)
     }
 
+    override fun getProgress(): Flow<MediaProgress> {
+        TODO("Not yet implemented")
+    }
     override fun getCurrentStatus(): DownloadingState {
         var downloadStatus: DownloadingState = DownloadingState.Idle
         val query = DownloadManager.Query()

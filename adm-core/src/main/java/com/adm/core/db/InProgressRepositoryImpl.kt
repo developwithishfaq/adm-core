@@ -14,6 +14,10 @@ class InProgressRepositoryImpl(
         return dao.getAllQueVideos()
     }
 
+    override suspend fun getAllQueVideosSingle(): List<InProgressVideoDB> {
+        return dao.getAllQueVideosSingle()
+    }
+
     override suspend fun getInProgressQueVideosSingle(): List<InProgressVideoDB> {
         return dao.getInProgressQueVideosSingle()
     }

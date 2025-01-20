@@ -49,7 +49,6 @@ class MyDownloaderManager(
             supportChunks = supportChunks,
         )
 
-        startService()
 
 
         val workerDownloadingModel = WorkerDownloadingModel(
@@ -66,103 +65,7 @@ class MyDownloaderManager(
 
         DownloadingWorker.startWorker(context, id.toString(), workerDownloadingModel)
 
-        CoroutineScope(Dispatchers.IO).launch {
-            launch {
-                WorkManager.getInstance(context).getWorkInfosByTagFlow(id.toString())
-                    .collectLatest { workInfos ->
-                        workInfos.forEach { workInfo ->
-                            if (workInfo != null) {
-                                when (workInfo.state) {
-                                    WorkInfo.State.ENQUEUED -> {
-                                        // Work is enqueued and waiting to be executed
-                                        log("Work Enqueued")
-                                    }
-
-                                    WorkInfo.State.RUNNING -> {
-                                        // Work is currently running
-                                        val progress =
-                                            workInfo.progress.getInt(
-                                                "KEY_PROGRESS",
-                                                0
-                                            ) // Get progress if any
-                                        log("Work Running - Progress: $progress%")
-                                    }
-
-                                    WorkInfo.State.SUCCEEDED -> {
-                                        // Work completed successfully
-                                        val outputData = workInfo.outputData
-                                        log("Work Succeeded")
-                                    }
-
-                                    WorkInfo.State.FAILED -> {
-                                        // Work failed
-                                        val outputData = workInfo.outputData
-                                        log("Work Failed $outputData ${workInfo.stopReason}")
-                                    }
-
-                                    WorkInfo.State.BLOCKED -> {
-                                        // Work is blocked by other work
-                                        log("Work Blocked")
-                                    }
-
-                                    WorkInfo.State.CANCELLED -> {
-                                        // Work was cancelled
-                                        log("Work Cancelled ${workInfo.stopReason}")
-                                    }
-                                }
-                            }
-                        }
-                    }
-            }
-            launch {
-                WorkManager.getInstance(context).getWorkInfosByTagFlow("net")
-                    .collectLatest { workInfos ->
-                        workInfos.forEach { workInfo ->
-                            if (workInfo != null) {
-                                when (workInfo.state) {
-                                    WorkInfo.State.ENQUEUED -> {
-                                        // Work is enqueued and waiting to be executed
-                                        log("Net Work Enqueued")
-                                    }
-
-                                    WorkInfo.State.RUNNING -> {
-                                        // Work is currently running
-                                        val progress =
-                                            workInfo.progress.getInt(
-                                                "KEY_PROGRESS",
-                                                0
-                                            ) // Get progress if any
-                                        log("Net Work Running - Progress: $progress%")
-                                    }
-
-                                    WorkInfo.State.SUCCEEDED -> {
-                                        // Work completed successfully
-                                        val outputData = workInfo.outputData
-                                        log("Net Work Succeeded")
-                                    }
-
-                                    WorkInfo.State.FAILED -> {
-                                        // Work failed
-                                        val outputData = workInfo.outputData
-                                        log("Net Work Failed $outputData ${workInfo.stopReason}")
-                                    }
-
-                                    WorkInfo.State.BLOCKED -> {
-                                        // Work is blocked by other work
-                                        log("Net Work Blocked")
-                                    }
-
-                                    WorkInfo.State.CANCELLED -> {
-                                        // Work was cancelled
-                                        log("Net Work Cancelled ${workInfo.stopReason}")
-                                    }
-                                }
-                            }
-                        }
-                    }
-            }
-        }
-    }
+     }
 
 
     suspend fun pauseDownloading(id: Long) {
@@ -174,8 +77,12 @@ class MyDownloaderManager(
     }
 
     suspend fun resumeDownloading(id: Long) {
-        val video=        inProgressRepository.getItemById(id)
-        if (video!=null){
+        progressManager.updateStatus(
+            id.toString(),
+            DownloadingState.Progress
+        )
+        val video = inProgressRepository.getItemById(id)
+        if (video != null) {
 
             val workerDownloadingModel = WorkerDownloadingModel(
                 id = id.toString(),
@@ -195,8 +102,12 @@ class MyDownloaderManager(
         WorkManager.getInstance(context).cancelAllWorkByTag(id.toString())
     }
 
-    fun deleteDownloading(id: Long) {
+    suspend fun deleteDownloading(id: Long) {
+        progressManager.deleteVideo(id.toString())
+    }
 
+    suspend fun cancelDownloading(id: Long) {
+        progressManager.updateStatus(id.toString(), DownloadingState.Paused)
     }
 
     suspend fun insertIntoDB(
@@ -220,17 +131,10 @@ class MyDownloaderManager(
             supportChunks = supportChunks,
             status = DownloadingState.Progress.name
         )
-        inProgressRepository.addInQue(inProgressVideoDB)
+        progressManager.addLocalVideo(inProgressVideoDB)
     }
 
-    private fun startService() {
-        /*   val serviceIntent = Intent(context, DownloadService::class.java)
-           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-               ContextCompat.startForegroundService(context, serviceIntent)
-           } else {
-               context.startService(serviceIntent)
-           }*/
-    }
+
 
 
 }

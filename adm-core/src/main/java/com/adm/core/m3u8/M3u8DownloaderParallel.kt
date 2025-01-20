@@ -5,7 +5,9 @@ import android.util.Log
 import com.adm.core.components.DownloadingState
 import com.adm.core.services.downloader.CustomDownloaderImpl
 import com.adm.core.services.downloader.MediaDownloader
+import com.adm.core.services.downloader.MediaProgress
 import com.adm.core.services.logger.Logger
+import com.adm.core.utils.createUniqueFolderName
 import com.down.m3u8_parser.listeners.M3u8ChunksPicker
 import com.down.m3u8_parser.model.SingleStream
 import com.down.m3u8_parser.parsers.M3u8ChunksPickerImpl
@@ -17,8 +19,12 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.UUID
 
 class M3u8DownloaderParallel(
     private val context: Context,
@@ -26,6 +32,7 @@ class M3u8DownloaderParallel(
     private val m3U8PlaylistParser: M3u8ChunksPicker = M3u8ChunksPickerImpl(),
     private val videosMerger: VideosMerger,
     private val logger: Logger,
+    private val analyticHelper: AnalyticHelper,
     private val maxParallelDownloads: MaxParallelDownloads
 
 ) : MediaDownloader {
@@ -39,6 +46,8 @@ class M3u8DownloaderParallel(
     var isCompleted = false
     var isPaused = false
     private var tempDirPath: File? = null
+    private val _progressFlow = MutableStateFlow(MediaProgress(DownloadingState.Progress, 0L, 0L))
+    override fun getProgress() = _progressFlow.asStateFlow()
 
     override suspend fun downloadMedia(
         url: String,
@@ -50,7 +59,13 @@ class M3u8DownloaderParallel(
         supportChunks: Boolean
     ): Result<String> = withContext(Dispatchers.IO) {
         tempDirPath =
-            tempDirProvider.provideTempDir("mp4Videos/${fileName.substringBeforeLast(".")}")
+            tempDirProvider.provideTempDir(
+                "mp4Videos/${url.createUniqueFolderName()}/${
+                    fileName.substringBeforeLast(
+                        "."
+                    )
+                }"
+            )
         tempDirPath?.let { tempDirPath ->
             try {
                 isFailed = false
@@ -70,11 +85,12 @@ class M3u8DownloaderParallel(
                         channel.send(Unit)  // Wait for a slot in the channel
                         Log.d("Cvrrr", "Base Url = sending $index")
                         val mediaDownloader = CustomDownloaderImpl(
-                            context,
-                            tempDirProvider,
-                            videosMerger,
-                            maxParallelDownloads,
-                            logger
+                            context = context,
+                            tempDirProvider = tempDirProvider,
+                            videosMerger = videosMerger,
+                            analyticHelper = analyticHelper,
+                            maxParallelDownloads = maxParallelDownloads,
+                            logger = logger,
                         )
                         val baseUrl = url.substringBeforeLast("/")
                         val urlToDownload = if (stream.link.startsWith("http")) {
@@ -100,6 +116,7 @@ class M3u8DownloaderParallel(
                         Log.d("Cvrrr", "Base Url = receiving $index")
                         channel.receive()
                         download += 1
+                        emitProgress()
                         download
                     }
                     downloadJobs.add(job)
@@ -115,11 +132,14 @@ class M3u8DownloaderParallel(
                 result.getOrThrow()
                 logger.logMessage("TAG", "Streams(${streams.size}) = " + streams.toString())
                 isCompleted = true
+                emitProgress()
                 return@withContext Result.success(File(directoryPath, fileName).path)
             } catch (e: Exception) {
                 if (e is CancellationException)
                     throw e
+                analyticHelper.logCrash(e)
                 isFailed = true
+                emitProgress()
                 Log.d("Cvrrr", "Base Url  Exception $e")
                 scope.cancel()
                 return@withContext Result.failure(e)
@@ -147,6 +167,7 @@ class M3u8DownloaderParallel(
 
     override fun cancelDownloading() {
         isFailed = true
+        emitProgress()
         scope.cancel()
     }
 
@@ -155,12 +176,24 @@ class M3u8DownloaderParallel(
             isPaused = false
 
         }
+        emitProgress()
+
+    }
+
+
+    private fun emitProgress() {
+        _progressFlow.update {
+            MediaProgress(getCurrentStatus(), download, totalChunks)
+        }
     }
 
     override fun pauseDownloading() {
         isPaused = true
+        emitProgress()
         scope.cancel()
     }
 
-
 }
+
+
+

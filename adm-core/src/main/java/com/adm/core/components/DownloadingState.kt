@@ -9,6 +9,7 @@ enum class DownloadingState {
     Success
 }
 
+
 fun String.getDownloadingStatus(): DownloadingState {
     return DownloadingState.entries.firstOrNull { it.name == this } ?: DownloadingState.Idle
 }

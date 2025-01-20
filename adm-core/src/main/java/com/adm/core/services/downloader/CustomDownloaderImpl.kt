@@ -2,14 +2,17 @@ package com.adm.core.services.downloader
 
 import android.content.Context
 import com.adm.core.components.DownloadingState
+import com.adm.core.m3u8.AnalyticHelper
 import com.adm.core.m3u8.MaxParallelDownloads
 import com.adm.core.m3u8.TempDirProvider
 import com.adm.core.m3u8.TempDirProviderImpl
 import com.adm.core.m3u8.VideosMerger
+import com.adm.core.m3u8.createNewFileIfNotExists
 import com.adm.core.m3u8.createParentFileIfNotExists
 import com.adm.core.model.CustomDownloaderModel
 import com.adm.core.services.logger.Logger
 import com.adm.core.utils.DownloaderPathsHelper
+import com.adm.core.utils.createUniqueFolderName
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -18,6 +21,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -32,6 +38,7 @@ class CustomDownloaderImpl(
     private val context: Context,
     private val tempDirProvider: TempDirProvider = TempDirProviderImpl(context = context),
     private val videosMerger: VideosMerger,
+    private val analyticHelper: AnalyticHelper,
     private val maxParallelDownloads: MaxParallelDownloads,
     private val logger: Logger
 ) : MediaDownloader {
@@ -52,10 +59,12 @@ class CustomDownloaderImpl(
     private var filesDownloaded = 0
     private var isDownloadingCompleted = false
     var mDestFile: File? = null
-    private var tempDirFile: File ?=null
+    private var tempDirFile: File? = null
     private val maxDownloadsCount: Int by lazy {
         maxParallelDownloads.getMaxParallelDownloadsCount()
     }
+    private val _progressFlow = MutableStateFlow(MediaProgress(DownloadingState.Progress, 0L, 0L))
+    override fun getProgress() = _progressFlow.asStateFlow()
 
     override suspend fun downloadMedia(
         url: String,
@@ -66,7 +75,14 @@ class CustomDownloaderImpl(
         showNotification: Boolean,
         supportChunks: Boolean
     ): Result<String> {
-         tempDirFile= tempDirProvider.provideTempDir("mp4Videos/${fileName.substringBeforeLast(".")}")
+        tempDirFile =
+            tempDirProvider.provideTempDir(
+                "mp4Videos/${url.createUniqueFolderName()}/${
+                    fileName.substringBeforeLast(
+                        "."
+                    )
+                }"
+            )
 
 
         try {
@@ -87,7 +103,7 @@ class CustomDownloaderImpl(
                     showNotification = showNotification
                 )
 //        CoroutineScope(Dispatchers.IO).launch {
-            downloadStatus = DownloadingState.Idle
+            updateStatus(DownloadingState.Progress)
             val result = downloadFile()
             result.getOrThrow()
 //        }
@@ -95,8 +111,14 @@ class CustomDownloaderImpl(
         } catch (e: Exception) {
             if (e is CancellationException)
                 throw e
+
+            analyticHelper.logCrash(e)
+            updateStatus(DownloadingState.Failed)
+
+            _progressFlow.update {
+                MediaProgress(getCurrentStatus(), getBytesInfo().first, totalBytesSize)
+            }
             scope.cancel()
-            downloadStatus = DownloadingState.Failed
             return Result.failure(e)
         }
     }
@@ -108,7 +130,8 @@ class CustomDownloaderImpl(
             scope = CoroutineScope(Dispatchers.IO)
 
             scope.launch {
-                downloadStatus = DownloadingState.Progress
+                updateStatus(DownloadingState.Progress)
+
                 downloadFile()
             }
         }
@@ -149,7 +172,7 @@ class CustomDownloaderImpl(
                                         "${index}.${model.fileName.substringAfterLast(".")}"
                                     )
                                     tempDestFile.createParentFileIfNotExists()
-                                    tempDestFile.createNewFile()
+                                    tempDestFile.createNewFileIfNotExists()
                                     logger.logMessage(
                                         TAG,
                                         "Chunk destFile path=${tempDestFile.path}"
@@ -181,6 +204,8 @@ class CustomDownloaderImpl(
                         isDownloadingCompleted = true
                     }
                 }
+                emitProgress()
+
 
                 return@withContext Result.success(Unit)
 
@@ -189,7 +214,7 @@ class CustomDownloaderImpl(
                 throw e
             } catch (e: Exception) {
                 logger.logMessage(TAG, "Error during download: ${e.message}")
-                return@withContext Result.failure(e)
+                throw e
             }
         }
 
@@ -214,7 +239,8 @@ class CustomDownloaderImpl(
                     TAG,
                     "Download already completed: ${destFile.path} ${destFile.length()}  ${endSize - startSize}"
                 )
-                hashMap[destFile.path] = destFile.length()
+//                hashMap[destFile.path] = destFile.length()
+                updateProgress(destFile, destFile.length())
                 return Result.success(Unit)
             }
             var existingFileSize = if (destFile.exists()) destFile.length() else 0
@@ -234,7 +260,6 @@ class CustomDownloaderImpl(
             connection.connect()
 
             if (connection.responseCode == HttpURLConnection.HTTP_PARTIAL || connection.responseCode == HttpURLConnection.HTTP_OK) {
-                updateStatusIfNotPaused(DownloadingState.Progress)
                 val totalSize = connection.contentLength + existingFileSize
                 logger.logMessage(TAG, "Starting download. Total size: $totalSize bytes.")
 
@@ -257,8 +282,8 @@ class CustomDownloaderImpl(
                     outputStream.write(buffer, 0, bytesRead)
                     val downloadedSize = outputStream.length()
                     downloadedBytesSize += bytesRead
-                    hashMap[destFile.path] = downloadedSize
-                    updateStatusIfNotPaused(DownloadingState.Progress)
+//                    hashMap[destFile.path] = downloadedSize
+                    updateProgress(destFile, downloadedSize)
                     logger.logMessage(
                         "ProgressTracker",
                         "Downloaded $downloadedSize / $totalSize bytes.\nUrl=${model.url}"
@@ -267,8 +292,7 @@ class CustomDownloaderImpl(
                 logger.logMessage(TAG, "Download after")
 
                 scope.ensureActive()
-                hashMap[destFile.path] = destFile.length()
-
+                updateProgress(destFile, destFile.length())
                 filesDownloaded += 1
 
                 logger.logMessage(
@@ -299,22 +323,23 @@ class CustomDownloaderImpl(
     override fun pauseDownloading() {
         scope.cancel()
         isPaused = true
-        downloadStatus = DownloadingState.Paused
+        updateStatus(DownloadingState.Paused)
     }
 
     override fun getBytesInfo(): Pair<Long, Long> {
-      val sum=hashMap.values.sum()
-       /* val value = if (supportChunking) {
-            var result = tempDirFile?.listFiles()?.sumOf { it.length() } ?: 0
-            if (result < 1) {
-                result = mDestFile?.length() ?: 0
-            }
-            result
-        } else {
-            mDestFile?.length() ?: 0L
-        }*/
+        val sum = hashMap.values.sum()
+        /* val value = if (supportChunking) {
+             var result = tempDirFile?.listFiles()?.sumOf { it.length() } ?: 0
+             if (result < 1) {
+                 result = mDestFile?.length() ?: 0
+             }
+             result
+         } else {
+             mDestFile?.length() ?: 0L
+         }*/
         return Pair(sum, totalBytesSize)
     }
+
 
     override fun getCurrentStatus(): DownloadingState {
         val downloadedBytesSize = hashMap.values.sum()
@@ -327,22 +352,16 @@ class CustomDownloaderImpl(
             model.fileName
         )
         if (destFile.exists() && destFile.length() >= totalBytesSize && totalBytesSize > 0)
-            return DownloadingState.Success
+            downloadStatus = DownloadingState.Success
         if (isDownloadingCompleted) {
-            return DownloadingState.Success
+            downloadStatus = DownloadingState.Success
+
         }
         return downloadStatus
     }
 
     override fun cancelDownloading() {
 
-    }
-
-
-    private fun updateStatusIfNotPaused(progress: DownloadingState) {
-        if (!isPaused) {
-            downloadStatus = progress
-        }
     }
 
 
@@ -386,6 +405,26 @@ class CustomDownloaderImpl(
             } finally {
                 connection?.disconnect()
             }
+        }
+    }
+
+    fun updateProgress(destFile: File, progress: Long) {
+        hashMap[destFile.path] = progress
+        logger.logMessage(
+            "EmitProgress",
+            "Downloaded $progress / $totalBytesSize bytes.\nUrl=${model.url}"
+        )
+        emitProgress()
+    }
+
+    fun updateStatus(progress: DownloadingState) {
+        downloadStatus = progress
+        emitProgress()
+    }
+
+    fun emitProgress() {
+        _progressFlow.update {
+            MediaProgress(getCurrentStatus(), getBytesInfo().first, totalBytesSize)
         }
     }
 

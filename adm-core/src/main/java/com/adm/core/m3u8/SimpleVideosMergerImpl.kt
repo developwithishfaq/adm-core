@@ -1,5 +1,6 @@
 package com.adm.core.m3u8
 
+import android.util.Log
 import com.adm.core.services.logger.Logger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +78,21 @@ class SimpleVideosMergerImpl(private val logger: Logger) : VideosMerger {
 fun File.createParentFileIfNotExists() {
     if (this.parentFile?.exists()?.not() == true)
         this.parentFile?.mkdirs()
+}
+fun File.createNewFileIfNotExists() {
+    Log.d(
+        "createNewFileIfNotExists",
+        "Chunk destFile path=${this.path} exists= ${this.exists()}"
+    )
+    if (this.exists().not()){
+
+       val pth=this.createNewFile()
+        Log.d(
+            "createNewFileIfNotExists",
+            "Chunk pth= $pth"
+        )
+    }
+
 }
 
 fun String.createParentFileIfNotExists() {

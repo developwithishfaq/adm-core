@@ -17,10 +17,13 @@ import com.adm.core.services.downloader.DownloaderTypeProvider
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -94,15 +97,19 @@ class DownloadingWorker(private val context: Context, params: WorkerParameters) 
     }
 
 
+    @OptIn(FlowPreview::class)
     private suspend fun checkProgress(downloader: DownloaderCoreImpl): Boolean {
         log("checkProgress: started")
-        val runLoop = true
+        var isDownloaded = false
         progressManager.updateStatus(workerDownloadingModel.id, DownloadingState.Progress)
-        while (runLoop) {
-            val downState = downloader.getDownloadingState()
+        downloader.getProgress().sample(1000).takeWhile {
+//            val downState = downloader.getDownloadingState()
 
-            val downloaded = downloader.getDownloadedSize()
-            val total = downloader.getTotalSize()
+//            val downloaded = downloader.getDownloadedSize()
+//            val total = downloader.getTotalSize()
+            val downState = it.downStatus
+            val downloaded = it.downSize
+            val total = it.totalSize
             Log.d(
                 "ProgressWorker",
                 "checkProgress(${downState})\ndownloaded=${downloaded},total=${total}"
@@ -113,33 +120,78 @@ class DownloadingWorker(private val context: Context, params: WorkerParameters) 
                 workerDownloadingModel.id.toLong().toInt(),
                 total, downloaded
             )
-            if (downState == DownloadingState.Success) {
-                log("DownloadingState.Success")
 
-                progressManager.updateStatus(workerDownloadingModel.id, DownloadingState.Success)
-                downloadNotificationManager.showDownloadSuccessNotification(
-                    workerDownloadingModel.id.toLong().toInt() + 1, workerDownloadingModel.fileName
-                )
-                return false
+            when (downState) {
+                DownloadingState.Success -> {
+                    log("DownloadingState.Success")
+                    progressManager.updateStatus(
+                        workerDownloadingModel.id,
+                        DownloadingState.Success
+                    )
+                    downloadNotificationManager.showDownloadSuccessNotification(
+                        workerDownloadingModel.id.toLong().toInt() + 1,
+                        workerDownloadingModel.fileName
+                    )
+                    isDownloaded = true
+                    false // Stop the flow
+                }
+
+                DownloadingState.Failed -> {
+                    if (!internetController.isInternetConnected) {
+                        NetConnectedWorker.startNetWorker(context)
+                        progressManager.updateStatus(
+                            workerDownloadingModel.id,
+                            DownloadingState.PausedNetwork
+                        )
+                        updateNotification(
+                            workerDownloadingModel.id.getInt() + 1,
+                            total, downloaded
+                        )
+                    } else {
+                        progressManager.updateStatus(
+                            workerDownloadingModel.id,
+                            DownloadingState.Failed
+                        )
+                    }
+                    false
+                }
+
+                else -> {
+                    true // Continue the flow
+                }
             }
-            if (internetController.isInternetConnected.not()) {
-                NetConnectedWorker.startNetWorker(context)
-                progressManager.updateStatus(
-                    workerDownloadingModel.id,
-                    DownloadingState.PausedNetwork
-                )
-                updateNotification(
-                    workerDownloadingModel.id.getInt() + 1,
-                    total, downloaded
-                )
-                return true
-            } else if (downState == DownloadingState.Failed) {
-                progressManager.updateStatus(workerDownloadingModel.id, DownloadingState.Failed)
-                return true
-            }
-            delay(1000)
         }
-        return false
+            .collectLatest { }
+//            if (downState == DownloadingState.Success) {
+//                log("DownloadingState.Success")
+//
+//                progressManager.updateStatus(workerDownloadingModel.id, DownloadingState.Success)
+//                downloadNotificationManager.showDownloadSuccessNotification(
+//                    workerDownloadingModel.id.toLong().toInt() + 1, workerDownloadingModel.fileName
+//                )
+//                 false
+//            }
+//            if (internetController.isInternetConnected.not()) {
+//                NetConnectedWorker.startNetWorker(context)
+//                progressManager.updateStatus(
+//                    workerDownloadingModel.id,
+//                    DownloadingState.PausedNetwork
+//                )
+//                updateNotification(
+//                    workerDownloadingModel.id.getInt() + 1,
+//                    total, downloaded
+//                )
+//                 true
+//            } else if (downState == DownloadingState.Failed) {
+//                progressManager.updateStatus(workerDownloadingModel.id, DownloadingState.Failed)
+//                 true
+//            }
+
+
+//        }
+
+        return isDownloaded
+
     }
 
     private fun updateNotification(id: Int, total: Long, downloaded: Long) {

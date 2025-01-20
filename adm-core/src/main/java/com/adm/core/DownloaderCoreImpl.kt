@@ -6,6 +6,8 @@ import com.adm.core.base.DownloaderBase
 import com.adm.core.components.DownloadingState
 import com.adm.core.components.SupportedMimeTypes
 import com.adm.core.services.downloader.MediaDownloader
+import com.adm.core.services.downloader.MediaProgress
+import kotlinx.coroutines.flow.Flow
 import java.io.File
 
 class DownloaderCoreImpl(
@@ -50,6 +52,10 @@ class DownloaderCoreImpl(
 
     override fun pauseDownloading(context: Context) {
         mMediaDownloader.pauseDownloading()
+    }
+
+    override fun getProgress(): Flow<MediaProgress> {
+         return mMediaDownloader.getProgress()
     }
 
     override fun getDownloadingState(): DownloadingState {

@@ -4,15 +4,23 @@ import android.util.Log
 import com.adm.core.components.DownloadingState
 import com.adm.core.components.getDownloadingStatus
 import com.adm.core.db.InProgressRepository
+import com.adm.core.db.InProgressVideoDB
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 
 data class InProgressVideoUi(
-    val id:String,
+    val id: String,
     val url: String = "",
     var fileName: String = "",
     val destinationDirectory: String = "",
@@ -23,52 +31,161 @@ data class InProgressVideoUi(
     val progress: Float = 0f
 )
 
+@OptIn(FlowPreview::class)
 class ProgressManager(
     private val inProgressRepository: InProgressRepository
 ) {
     val scope = CoroutineScope(Dispatchers.IO)
 
+    val inprogressMap = mutableMapOf<String, InProgressVideoUi>()
+
+    private val mapMutex = Mutex()
+    private val _videosProgress = MutableStateFlow<List<InProgressVideoUi>>(emptyList())
+    val videosProgress = _videosProgress.asStateFlow()
+
+    init {
+
+        scope.launch {
+            _videosProgress.update {
+                inProgressRepository.getAllQueVideosSingle().map {
+                    val model = it.toUiModel()
+                    inprogressMap[model.id] = model
+                    model
+                }
+            }
+            videosProgress
+                .sample(1000)
+                .collectLatest {
+                    batchUpdateDatabase()
+                    Log.d("cvrrr", "batchUpdateDatabase")
+                }
+        }
+    }
+
     suspend fun updateProgress(id: String, downloaded: Long, total: Long) {
-        var inProgressVideo = inProgressRepository.getItemById(id.toLong())
-        if (inProgressVideo != null) {
-            inProgressVideo = inProgressVideo.copy(downloadedSize = downloaded, totalSize = total)
-            inProgressRepository.addInQue(inProgressVideo)
+        Log.d(
+            "cvrrr",
+            "update Progress,  id=$id progress=${downloaded / total.toFloat()}} downloaded= $downloaded ${total}"
+        )
+
+
+        mapMutex.withLock {
+            inprogressMap[id]?.let { video ->
+                val updatedVideo = video.copy(
+                    downloadedSize = downloaded,
+                    totalSize = total,
+                    progress = downloaded / total.toFloat(),
+                )
+                inprogressMap[id] = updatedVideo
+                emitProgressUpdates()
+             }
         }
     }
 
     suspend fun updateStatus(id: String, downState: DownloadingState) {
-        var inProgressVideo = inProgressRepository.getItemById(id.toLong())
-        if (inProgressVideo != null) {
-            inProgressVideo = inProgressVideo.copy(status = downState.name)
-            inProgressRepository.addInQue(inProgressVideo)
+        mapMutex.withLock {
+            inprogressMap[id]?.let { video ->
+                val updatedVideo = video.copy(
+                    status = downState
+                )
+                inprogressMap[id] = updatedVideo
+                emitProgressUpdates()
+
+            }
+        }
+    }
+
+    suspend fun deleteVideo(id: String) {
+        inprogressMap.remove(id.toString())
+        inProgressRepository.deleteFromQue(id.toLong())
+    }
+    suspend fun addLocalVideo(db: InProgressVideoDB) {
+        val video = inProgressRepository.getItemById(db.downloadId)
+        if (video == null) {
+            Log.d("cvv", "addLocalVideo $video")
+            inProgressRepository.addInQue(db)
+            inprogressMap[db.downloadId.toString()] = db.toUiModel()
+            emitProgressUpdates()
+
         }
     }
 
 
-    private fun calculateProgress(downloadedBytes: Long, totalBytes: Long): Float {
-        return if (totalBytes > 0L) {
-            val percentageIn100 = ((downloadedBytes.toFloat() / totalBytes) * 100) / 100f
-            Log.d("cvv", "calculateProgress(${downloadedBytes}/${totalBytes}): $percentageIn100")
-            percentageIn100
-        } else {
-            0f // Return 0.0 if totalBytes is 0 to avoid division by zero
+    private suspend fun batchUpdateDatabase() {
+        mapMutex.withLock {
+            val videosToUpdate = inprogressMap.values.toList()
+            val dbMap: Map<String, InProgressVideoDB> = inProgressRepository.getInProgressQueVideosSingle()
+                .associateBy { it.downloadId.toString() }
+            Log.d("cvrrr","batchUpdateDatabase videosToUpdate=$videosToUpdate")
+            Log.d("cvrrr","batchUpdateDatabase dbMap=$dbMap")
+
+            if (videosToUpdate.isNotEmpty()) {
+                videosToUpdate.forEach { uiModel ->
+                    val inProgressVideo= dbMap[uiModel.id]
+                    if (inProgressVideo != null ) {
+                        val inProgressVideoNew = inProgressVideo.copy(
+                            status = uiModel.status.name,
+                            downloadedSize = uiModel.downloadedSize,
+                            totalSize = uiModel.totalSize,
+                        )
+                        Log.d("cvrrr","batchUpdateDatabase $inProgressVideoNew")
+                        Log.d("cvrrr","batchUpdateDatabase inProgressVideo= $inProgressVideo")
+
+                        if (inProgressVideoNew!=inProgressVideo){
+                            Log.d("cvrrr","batchUpdateDatabase inProgressVideoNew!=inProgressVideo= ${inProgressVideoNew!=inProgressVideo}")
+
+                            inProgressRepository.addInQue(inProgressVideoNew)
+                        }else{
+                            Log.d("cvrrr","batchUpdateDatabase else inProgressVideoNew!=inProgressVideo= ${inProgressVideoNew!=inProgressVideo}")
+
+                        }
+                    }
+                 }
+            }
         }
     }
 
+    fun emitProgressUpdates() {
+        _videosProgress.value = inprogressMap.values.toList()
 
-    val videosProgress = inProgressRepository.getAllQueVideos().map {
-        it.map {
-            InProgressVideoUi(
-                id = it.downloadId.toString(),
-                url = it.url,
-                fileName = it.fileName,
-                destinationDirectory = it.destinationDirectory,
-                mimeType = it.mimeType,
-                status = it.status.getDownloadingStatus(),
-                downloadedSize = it.downloadedSize,
-                totalSize = it.totalSize,
-                progress = it.downloadedSize / it.totalSize.toFloat(),
-            )
-        }
-    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+    }
+
+//
+//    val videosProgress = inProgressRepository.getAllQueVideos().map {
+//        it.map {
+//            InProgressVideoUi(
+//                id = it.downloadId.toString(),
+//                url = it.url,
+//                fileName = it.fileName,
+//                destinationDirectory = it.destinationDirectory,
+//                mimeType = it.mimeType,
+//                status = it.status.getDownloadingStatus(),
+//                downloadedSize = it.downloadedSize,
+//                totalSize = it.totalSize,
+//                progress = it.downloadedSize / it.totalSize.toFloat(),
+//            )
+//        }
+//    }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+}
+
+fun InProgressVideoUi.toInProgressDB(model: InProgressVideoDB): InProgressVideoDB {
+    return model.copy(
+        status = this.status.name,
+        downloadedSize = this.downloadedSize,
+        totalSize = this.totalSize
+    )
+}
+
+fun InProgressVideoDB.toUiModel(): InProgressVideoUi {
+    return InProgressVideoUi(
+        id = this.downloadId.toString(),
+        url = this.url,
+        fileName = this.fileName,
+        destinationDirectory = this.destinationDirectory,
+        mimeType = this.mimeType,
+        status = this.status.getDownloadingStatus(),
+        downloadedSize = this.downloadedSize,
+        totalSize = this.totalSize,
+        progress = this.downloadedSize / this.totalSize.toFloat(),
+    )
 }

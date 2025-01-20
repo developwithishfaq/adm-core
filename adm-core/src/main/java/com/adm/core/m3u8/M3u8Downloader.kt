@@ -5,9 +5,11 @@ import android.util.Log
 import com.adm.core.components.DownloadingState
 import com.adm.core.services.downloader.CustomDownloaderImpl
 import com.adm.core.services.downloader.MediaDownloader
+import com.adm.core.services.downloader.MediaProgress
 import com.down.m3u8_parser.listeners.M3u8ChunksPicker
 import com.down.m3u8_parser.model.SingleStream
 import com.down.m3u8_parser.parsers.M3u8ChunksPickerImpl
+import kotlinx.coroutines.flow.Flow
 import java.io.File
 import java.util.UUID
 
@@ -67,6 +69,10 @@ class M3u8Downloader(
 
     override fun getBytesInfo(): Pair<Long, Long> {
         return Pair(download , totalChunks )
+    }
+
+    override fun getProgress(): Flow<MediaProgress> {
+        TODO("Not yet implemented")
     }
 
     override fun getCurrentStatus(): DownloadingState {

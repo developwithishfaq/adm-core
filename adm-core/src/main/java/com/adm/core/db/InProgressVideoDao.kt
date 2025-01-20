@@ -14,7 +14,10 @@ interface InProgressVideoDao {
     @Query("SELECT * FROM InProgressVideoDB  ORDER BY downloadId DESC")
     fun getAllQueVideos(): Flow<List<InProgressVideoDB>>
 
-    @Query("SELECT * FROM InProgressVideoDB where status='PausedNetwork'  ORDER BY downloadId DESC ")
+  @Query("SELECT * FROM InProgressVideoDB  ORDER BY downloadId DESC")
+    suspend fun getAllQueVideosSingle():  List<InProgressVideoDB>
+
+    @Query("SELECT * FROM InProgressVideoDB  ORDER BY downloadId DESC ")
     fun getInProgressQueVideosSingle(): List<InProgressVideoDB>
 
 

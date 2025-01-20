@@ -13,9 +13,13 @@ import com.adm.core.components.DownloadingState
 import com.adm.core.components.SupportedMimeTypes
 import com.adm.core.m3u8.createThisFolderIfNotExists
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.sample
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -29,7 +33,7 @@ data class ScreenState(
 )
 
 class MainScreenViewModel(
-     private val myDownloaderManager: MyDownloaderManager,
+    private val myDownloaderManager: MyDownloaderManager,
     private val progressManager: ProgressManager
 ) : ViewModel() {
 
@@ -60,13 +64,13 @@ class MainScreenViewModel(
          }*/
     }
 
-    fun pause(id:Long) {
+    fun pause(id: Long) {
         viewModelScope.launch {
             myDownloaderManager.pauseDownloading(id)
         }
     }
 
-    fun resume(id:Long) {
+    fun resume(id: Long) {
         viewModelScope.launch {
             myDownloaderManager.resumeDownloading(id)
         }
@@ -78,7 +82,7 @@ class MainScreenViewModel(
         val fileName = "Test" + ".mp4"
         val mainStorage =
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-      val folder=  File(mainStorage, directory)
+        val folder = File(mainStorage, directory)
         folder.path.createThisFolderIfNotExists()
         return Pair(fileName, folder.absolutePath)
     }
@@ -187,6 +191,10 @@ class MainScreenViewModel(
         }
     }
 
-    val progress=progressManager.videosProgress
+    @OptIn(FlowPreview::class)
+    val progress = progressManager.videosProgress.sample(1000).stateIn(
+        viewModelScope, SharingStarted.Eagerly,
+        emptyList()
+    )
 
 }

@@ -9,8 +9,10 @@ import com.adm.core.db.AppDatabase
 import com.adm.core.db.InProgressRepository
 import com.adm.core.db.InProgressRepositoryImpl
 import com.adm.core.db.InProgressVideoDao
+import com.adm.core.m3u8.AnalyticHelper
 import com.adm.core.m3u8.MaxParallelDownloads
 import com.adm.core.m3u8.MaxParallelDownloadsImpl
+import com.adm.core.m3u8.MyAnalyticHelper
 import com.adm.core.m3u8.SimpleVideosMergerImpl
 import com.adm.core.m3u8.TempDirProvider
 import com.adm.core.m3u8.TempDirProviderImpl
@@ -67,11 +69,14 @@ val coreModule = module {
         MaxParallelDownloadsImpl()
     }
     single<DownloaderTypeProvider> {
-        DownloaderTypeProviderImpl(get(),get(),get(),get(),get(),get())
+        DownloaderTypeProviderImpl(get(),get(),get(),get(),get(),get(),get())
     }
 
     single<Logger> {
         LoggerImpl()
+    }
+    single<AnalyticHelper> {
+        MyAnalyticHelper()
     }
 
     single<Logger> {

@@ -1,5 +1,6 @@
 package com.down.adm_core
 
+import android.util.Log
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,9 @@ fun MainScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val progress: List<InProgressVideoUi> by viewModel.progress.collectAsStateWithLifecycle()
+    LaunchedEffect(progress) {
+        Log.d("MainScereen","Progress= $progress")
+    }
     val context = LocalContext.current
     Column(
         modifier = Modifier
