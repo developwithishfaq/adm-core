@@ -116,8 +116,6 @@ class ProgressManager(
             val videosToUpdate = inprogressMap.values.toList()
             val dbMap: Map<String, InProgressVideoDB> = inProgressRepository.getInProgressQueVideosSingle()
                 .associateBy { it.downloadId.toString() }
-            Log.d("cvrrr","batchUpdateDatabase videosToUpdate=$videosToUpdate")
-            Log.d("cvrrr","batchUpdateDatabase dbMap=$dbMap")
 
             if (videosToUpdate.isNotEmpty()) {
                 videosToUpdate.forEach { uiModel ->
@@ -128,16 +126,8 @@ class ProgressManager(
                             downloadedSize = uiModel.downloadedSize,
                             totalSize = uiModel.totalSize,
                         )
-                        Log.d("cvrrr","batchUpdateDatabase $inProgressVideoNew")
-                        Log.d("cvrrr","batchUpdateDatabase inProgressVideo= $inProgressVideo")
-
                         if (inProgressVideoNew!=inProgressVideo){
-                            Log.d("cvrrr","batchUpdateDatabase inProgressVideoNew!=inProgressVideo= ${inProgressVideoNew!=inProgressVideo}")
-
                             inProgressRepository.addInQue(inProgressVideoNew)
-                        }else{
-                            Log.d("cvrrr","batchUpdateDatabase else inProgressVideoNew!=inProgressVideo= ${inProgressVideoNew!=inProgressVideo}")
-
                         }
                     }
                  }
